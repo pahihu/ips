@@ -1,15 +1,17 @@
-CFLAGS	= -m32 -Wall -O3
+CFLAGS	= -Wall -O3 -I.
 # Add -DBIGENDIAN to the above if your machine is big-endian.
 # Doing so is also correct on little-endian machines, but results
 # in slightly less efficient code.
+LDFLAGS	= -L. -lm
 
-LDFLAGS	= -lm -lncurses
-SRCS = ips.c emu.c
-OBJS = ips.o emu.o
+SRCS = ips_win32.c emu.c conio2.c
 
-ips: $(SRCS)
+ipsw.exe: $(SRCS)
 	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDFLAGS)
+	
+ips_win32.o:	ips_win32.c ips.h
 
-ips.o:	ips.c ips.h
 emu.o:	emu.c ips.h
+
+conio2.o:	conio2.c conio2.h
 

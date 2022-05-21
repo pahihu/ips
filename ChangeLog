@@ -1,0 +1,5 @@
+150630AP
+	Makefile.win32
+	original ips.c renamed to ips_unix.c, PDCurses fails to translate
+	KEY_BACKSPACE/Ctrl-C hence the Mingw port
+	ips_win32.c created using SF conio21 library, ipsw.exe

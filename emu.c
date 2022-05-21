@@ -26,6 +26,7 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 
 #include "ips.h"
 
@@ -72,25 +73,25 @@ u16 RS=0x4f8;
 
 int input_ptr=512;
 
-void push_ps(u16 w)
+inline void push_ps(u16 w)
 {
    PS-=2;
    poke(PS,w);
 }
 
-u16 pull_ps()
+inline u16 pull_ps()
 {
    PS+=2;
    return peek(PS-2);
 }
 
-void push_rs(u16 w)
+inline void push_rs(u16 w)
 {
    RS-=2;
    poke(RS,w);
 }
 
-u16 pull_rs()
+inline u16 pull_rs()
 {
    RS+=2;
    return peek(RS-2);
@@ -387,7 +388,7 @@ void c_loopex(void)
 void c_plusloopex(void) 
 {
    int i;
-   i=(s16)(pull_rs());
+   i=(s16)(pull_ps());
    loop_sharedcode(i+(s16)pull_rs());
 }
 
@@ -726,20 +727,30 @@ void c_sleepifidle(void)
 
 
 void (*despatch[])(void) = {
-   c_rumpelstilzchen, c_defex, c_consex, c_varex, c_retex, c_get, c_getB, c_put,
-   c_putB, c_1bliteral, c_2bliteral, c_bronz, c_jump, c_weg, c_pweg, c_plus,
+   c_rumpelstilzchen, c_defex, c_consex, c_varex,
+	c_retex, c_get, c_getB, c_put,
+   c_putB, c_1bliteral, c_2bliteral, c_bronz,
+	c_jump, c_weg, c_pweg, c_plus,
 
-   c_minus, c_dup, c_pdup, c_vert, c_zwo, c_rdu, c_rdo, c_index,
-   c_s_to_r, c_r_to_s, c_eqz, c_gz, c_lz, c_geu, c_f_vergl, c_nicht,
+   c_minus, c_dup, c_pdup, c_vert,
+	c_zwo, c_rdu, c_rdo, c_index,
+   c_s_to_r, c_r_to_s, c_eqz, c_gz,
+	c_lz, c_geu, c_f_vergl, c_nicht,
 
-   c_und, c_oder, c_exo, c_bit, c_cbit, c_sbit, c_tbit, c_jeex,
-   c_loopex, c_plusloopex, c_fieldtrans, c_pmul, c_pdiv, c_tue, c_polyname, c_scode,
+   c_und, c_oder, c_exo, c_bit,
+	c_cbit, c_sbit, c_tbit, c_jeex,
+   c_loopex, c_plusloopex, c_fieldtrans, c_pmul,
+	c_pdiv, c_tue, c_polyname, c_scode,
 
-   c_cscan, c_chs, c_cyc2, c_close, c_open, c_oscli, c_load, c_save,
-   c_setkbptr, c_getPS, c_setPS, c_rp_code, c_tr_code, c_swap3, c_defchar, c_pplus,
+   c_cscan, c_chs, c_cyc2, c_close,
+	c_open, c_oscli, c_load, c_save,
+   c_setkbptr, c_getPS, c_setPS, c_rp_code,
+	c_tr_code, c_swap3, c_defchar, c_pplus,
 
-   c_pminus, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen,
-   c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen,
+   c_pminus, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen,
+	c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen,
+   c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen,
+	c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen, c_rumpelstilzchen,
 
    c_sleepifidle
 };
@@ -821,6 +832,8 @@ void read_inputfile(void)
          }
          break; 
       }
+		if (ch=='\t')
+			ch=' ';
       if (ch=='\r') {
          /* ignore \r, we expect at least also a \n as end-of-line */
       } else if (ch=='\n') {

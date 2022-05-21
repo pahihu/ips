@@ -30,10 +30,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
-#include <ncurses.h>
-#include <sys/time.h>
+#include <sys/timeb.h>
 #include <time.h>
 #include <unistd.h>
+
+#include <conio2.h>
+#define WIN32_LEAN_AND_MEAN	1
+#include <windows.h>
 
 #include "ips.h"
 
@@ -42,22 +45,18 @@
 
 void do_sleep(void)   /* sleep for a little while, i.e., give up CPU time to other processes */
 {
-   struct timeval timeout;
-   timeout.tv_sec=0;
-   timeout.tv_usec=10000;    /* 10 milliseconds */
-   select(0,NULL,NULL,NULL,&timeout);
+	_sleep(10);
 }
 
 
 int test_20ms(void)    /* test whether another 20 milliseconds have passed by */
 {
-   struct timeval tv;
-   struct timezone tz;
-   static long thr_usec=0;
-   gettimeofday(&tv,&tz);
-   if (tv.tv_usec<thr_usec || tv.tv_usec>=thr_usec+20000) {
-      thr_usec+=20000;
-      if (thr_usec==1000000) thr_usec=0;
+	struct _timeb tb;
+   static long thr_msec=0;
+	_ftime(&tb);
+   if (tb.millitm<thr_msec || tb.millitm>=thr_msec+20) {
+      thr_msec+=20;
+      if (thr_msec==1000) thr_msec=0;
       return 1;
    }
    return 0;
@@ -85,73 +84,107 @@ void init_uhr(void)   /* initialize the UHR with the present time */
 
 /**************** code for handling screen and keyboard **********************/
 
-WINDOW *w;
+unsigned short norm_attr;
+unsigned short rev_attr;
+static HANDLE hStdin;
+static DWORD old_mode;
 
 void do_redraw(void)   /* refresh the screen */
 {
-   int i,j,inv;
+   int i,j;
+	struct char_info scr[16*64];
+	unsigned short attr;
 
-   werase(w);
-   inv=0;
+	_conio_gettext(2,2,64+1,16+1,scr);
    for (j=0;j<16;j++) {
-      wmove(w,j,0);
       for (i=0;i<64;i++) {
          int c=mem[j*64+i];
-         int nwinv;
-         nwinv=(c&0x80);
-         if (inv!=nwinv) {
-            inv=nwinv;
-            if (inv) wattron(w,A_REVERSE);
-            else wattroff(w,A_REVERSE);
-         }
+         int inv=(c&0x80);
+         if (inv) attr = rev_attr;
+         else attr = norm_attr;
          c&=0x7f;
          if (c<0x20) c|=0x80;
-         waddch(w,c);
+			scr[j*64+i].letter = c;
+			scr[j*64+i].attr   = attr;
       }
    }
-   if (inv) wattroff(w,A_REVERSE);
-   wrefresh(w);
+	puttext(2,2,64+1,16+1,scr);
 }
 
-void init_ncurses(void)
+void init_console(void)
 {
-   initscr(); 
-   nonl(); 
-   // noecho(); 
-	raw();
-   curs_set(0); 
-   cbreak(); 
-   
-   w=newwin(18,66,1,1);
-   box(w,ACS_VLINE,ACS_HLINE);
-   mvwaddch(w,0,4,ACS_RTEE);
-   waddstr(w,"Meinzer M-9097 IPS Computer");
-   waddch(w,ACS_LTEE);
-   wrefresh(w);
-   delwin(w);
+	int i;
+	DWORD new_mode;
+	struct text_info ti;
 
-   w=newwin(16,64,2,2);
-   wrefresh(w);
+	hStdin  = GetStdHandle(STD_INPUT_HANDLE);
 
-   leaveok(w,TRUE);
-   nodelay(w,TRUE); 
-   keypad(w,TRUE);
+	GetConsoleMode(hStdin, &old_mode);
+	new_mode = old_mode & ~ENABLE_PROCESSED_INPUT;
+	SetConsoleMode(hStdin, new_mode);
+
+	inittextinfo();
+	gettextinfo(&ti);
+	norm_attr = LIGHTGRAY + (     BLUE << 4);
+	rev_attr  =      BLUE + (LIGHTGRAY << 4);
+
+	textcolor(LIGHTGRAY);
+	textbackground(BLUE);
+	clrscr();
+	cputsxy(1,1,
+"+----------------------------------------------------------------+");
+	for (i = 0; i < 16; i++)
+		cputsxy(1,2+i,
+"|                                                                |");
+	cputsxy(1,18,
+"+----------------------------------------------------------------+");
+	cputsxy(18,1,"[Meinzer M-9097 IPS Computer]");
 }
 
-int convcase=0;
+void end_console(void)
+{
+	normvideo();
+	clrscr();
+	SetConsoleMode(hStdin,old_mode);
+	exit(0);
+}
+
+#define KEY_LEFT				0xE04B
+#define KEY_RIGHT				0xE04D
+#define KEY_UP					0xE048
+#define KEY_DOWN				0xE050
+#define KEY_BACKSPACE		0x0008
+#define KEY_DC					0xE053
+#define KEY_IC					0xE052	
+#define CTRL_C					0x0003
+#define ERR						0
+
+int get_ch(void)
+{
+	int c = 0;
+
+	if (kbhit()) {
+		c = getch();
+		if (0 == c || 0xE0 == c) {
+			if (!c) c = 0xF0;
+			c = (c << 8) + getch();
+		}
+	}
+	return c;
+}
 
 int handle_keyboard(void)
 {
-   int c;
+   int c=0;
    static int insertmode=1;
    int ret=1;
 
    mem[input_ptr]&=0x7f;
 
-   c=wgetch(w);
+	c = get_ch();
 
-	if (convcase && ('a'<=c && c<='z'))
-		c+='A'-'a';
+	if (CTRL_C == c)
+		end_console();
 
    switch (c) {
       case ERR: 
@@ -212,7 +245,7 @@ int main(int argc,char **argv)
    /* parse command line */
    while (1) {
       int i;
-      i=getopt(argc,argv,"c:f:i:xuh");
+      i=getopt(argc,argv,"c:f:i:xh");
       if (i<0) break;
       switch (i) {
          case 'c':
@@ -229,9 +262,6 @@ int main(int argc,char **argv)
             if (!optarg) goto error;
             image=optarg;
             break;
-			case 'u':
-				convcase=1;
-				break;
          case 'x':
             image="IPS-Xu.bin";
             break;
@@ -245,7 +275,6 @@ error:
 "-f <filename>   - load IPS source file, equivalent to -c '\" <filename> \" READ'\n"
 "-i <filename>   - load image from file, default is IPS-Mu.bin\n"
 "-x              - be cross-compiler, equivalent to -i IPS-Xu.bin\n"
-"-u              - cvt kbd to ucase\n"
 "");
             return 1;
       }
@@ -272,15 +301,13 @@ error:
    }
 
    /* initialize the ncurses stuff */
-   init_ncurses();
+   init_console();
 
    /* initialize the UHR */
    init_uhr();
 
    /* finally, run the emulator */
    emulator();
-
-   endwin();
 
    return 0;
 }
